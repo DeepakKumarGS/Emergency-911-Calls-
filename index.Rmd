@@ -1,0 +1,185 @@
+---
+title: "911 Analysis"
+author: "Deepak Kumar"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    number_sections: yes
+    toc: yes
+    theme: united
+    highlight: espresso
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,warning=FALSE,message=FALSE)
+```
+
+#Loading the libraries
+
+```{r}
+library(ggplot2)
+library(plyr)
+library(dplyr)
+library(plotly)
+library(lubridate)
+library(highcharter)
+library(reshape2)
+library(tidyr)
+library(gridExtra)
+cal=read.csv("911.csv",stringsAsFactors = FALSE,header=TRUE)
+dim(cal)
+```
+
+# Cleaning the data:
+
+```{r}
+cal$timeStamp=as.POSIXct(cal$timeStamp)
+cal$date=as.Date(cal$timeStamp)
+cal$year=year(cal$timeStamp)
+cal$month=month(cal$timeStamp)
+cal$day=day(cal$timeStamp)
+cal$hour=hour(cal$timeStamp)
+cal$month=month(as.Date(cal$timeStamp),label=TRUE,abbr=TRUE)
+cal=separate(cal,title,c("type","subtype"),sep=":")
+cal=separate(cal,desc,c("e","f","g"),sep=";")
+cal$e=NULL
+cal$f=NULL
+cal$g=NULL
+glimpse(cal)
+```
+
+# What part of the day is most of the call received?
+
+```{r}
+temp= cal %>% group_by(hour) %>% summarise(count=n())
+highchart() %>% hc_title(text="TimeSeries of 911 Calls spread over a day",style=list(color="red",fontText="Verdana")) %>% hc_xAxis(categories=temp$hour) %>% hc_add_series(name="count of calls",data=temp$count) %>% hc_add_theme(hc_theme_google())
+```
+
+The calls seems to peak starting in the morning at 6AM and peak calls are reveived at 5PM in the evening.This is when most of the offices would have left and people tend to return home,traffic would be heavy,parties and functions would start ideally.There is a little downward trend shown at 1PM which is ideally the lunchtime.At 4AM in the morning,least calls are received.
+
+# What are the category of emergencies recorded?
+
+```{r}
+temp = cal %>% group_by(type) %>% summarise(count=n())
+highchart() %>% hc_title(text="Type of Calls made",style=list(color="green",fontStyle="verdana"))%>% hc_xAxis(categories=temp$type,color=temp$type) %>% hc_add_series(type="column",data=temp$count)
+```
+
+EMS calls are made mode to 911 followed by Traffic.Lts analyse what type of EMS calls are made and at which part of the day it is being made.
+
+## How many calls are made under each category through the day?
+
+```{r,fig.width=12,fig.height=12}
+temp=cal %>% group_by(type,hour) %>% summarise(count=n())
+ggplot(temp,aes(type,count,fill=type))+geom_bar(stat="identity")+theme(axis.text.x = element_text(angle=90,vjust=0.4),plot.title=element_text(size=14,color="red",face="bold",hjust=0.5),plot.subtitle = element_text(size=10,color="black",face="italic",hjust=0.5),legend.position="none")+labs(x="Type",y="count",title="Type of calls made through the day",subtitle="Analysis of calls every hour by type")+facet_wrap(~hour,scales="free")
+```
+
+> Observations:
+
+* EMS calls are made more when compared to Fire and traffic.
+* Consistency is observed in EMS calls through the day.
+* Traffic related calls spike aroung 5-6 PM in the evening.At 7-8 AM in the morning,Traffic and EMS calls dominate.This trend is replicated in the evening 3-4PM.
+* At 4 in the morning where the calls received at 911 are lowest,EMS calls dominate.
+
+## Which day of the week sees more calls and which type?
+
+```{r}
+cal$day=wday(as.Date(cal$date),label=TRUE,abbr = FALSE)
+temp= cal %>% group_by(type,day) %>% summarise(count=n()) %>% arrange(-count)
+ggplot(temp,aes(day,count,fill=day))+geom_bar(stat="identity")+theme(axis.text.x = element_text(angle=90,vjust=0.5),plot.title = element_text(color="blue",size=15,face="bold",hjust=0.5),legend.position="none")+labs(x="Day of the week",y="count",title="Day of the week and type ")+facet_wrap(~type,scales = "free")
+```
+
+> Observations:
+
+* Friday receives maximum calls under EMS &  Traffic while Sunday receives low calls on Traffic while EMS and Fire are more.This is justified since Sunday is an off and people tend to stay at home and could organise a party or celebration or some stuff that there is a possibility of having EMS or fire related mishaps.
+
+* When compared to number of calls in EMS & Fire in Traffic type,there is a drastic fall in the number of calls made during weekends-Saturday and Sunday.
+
+## Which month receives maximum number of calls and under which category?
+
+```{r,fig.width=10,fig.height=5}
+temp = cal %>% group_by(month,type) %>% summarise(count=n())
+p1=ggplot(temp,aes(month,count,fill=type))+geom_bar(stat="identity")+theme(axis.text.x=element_text(angle=90,vjust=0.9),plot.title=element_text(color="red",size=15,hjust=0.5))+labs(x="Month",y="Count")+ggtitle("911 Calls made each month")
+p2=ggplot(temp,aes(month,count,fill=month))+geom_bar(stat="identity")+facet_wrap(~type)+theme(axis.text.x=element_text(angle=90,vjust=0.9),legend.position="None",plot.title=element_text(color="red",size=15,hjust=0.5))+labs(x="Month",y="Count")+ggtitle("911 Calls made each month-by category")
+grid.arrange(p1,p2,nrow=1,ncol=2,top="911 Call analysis")
+```
+
+Jan and Dec has seen maximum number of calls made and whereas from a period of Jun-Nov the calls have remained low when compared to other months.From feb to may there are  gradual ups and downs.
+
+# EMS Analysis
+
+```{r,fig.width=11,fig.height=13}
+temp=cal %>% filter(type=="EMS")%>% group_by(subtype) %>% summarise(count=n()) %>% arrange(-count)
+ggplot(temp,aes(subtype,count,fill=subtype))+geom_bar(stat="identity")+theme(axis.text.x=element_text(angle=90,vjust=0.9),legend.position="None",plot.title=element_text(color="red",size=15,hjust=0.5))+labs(x="Type",y="Count")+ggtitle("EMS calls made through 911")+coord_flip()
+```
+
+
+
+Cardiac Emergency,Vehicle accident,Respiratory emergency and fall victim calls are made maximum through 911.
+
+## Which part of the day receives maximum calls registered under EMS?
+
+```{r,fig.width=15,fig.height=15}
+temp=cal %>% filter(type=="EMS") %>% group_by(subtype,hour) %>% summarise(count=n()) %>% arrange(-count)
+ggplot(temp,aes(hour,count,fill=subtype))+geom_bar(stat="identity")+labs(x="Time in Hour",y="Count",fill="EMS Type")+ggtitle("EMS Call pattern through the day")+theme(legend.position="bottom",plot.title = element_text(color="red",size=30,face='bold',hjust=0.5))+scale_x_continuous(limits=c(0,23),breaks=seq(0,23,1))
+```
+
+
+Interestingly, The calls seems to follow *almost* a normal distribution from 6AM till midnight.Peaks calls are made at 10 AM in the morning.Though the general trend in 911 peak calls were received at 5PM,most EMS calls are made in the morning 10AM compared to 5PM in evening.
+
+# Traffic Analysis 
+
+```{r}
+temp=cal %>% filter(type=="Traffic") %>% group_by(subtype) %>% summarise(count=n()) %>% arrange(-count)
+ggplot(temp,aes(subtype,count,fill=subtype))+geom_bar(stat="identity")+theme(axis.text.x=element_text(angle=90,hjust=0.5),legend.position="None",plot.title=element_text(color="red",size=15,hjust=0.5))+labs(x="Type",y="Count")+ggtitle("Traffic calls made through 911")+coord_flip()
+
+```
+
+Vehicle accident,disabled vehicles,road obstruction seems to be dominating calls under TRAFFIC category.Lts analyse which part of the day are most of the calls made.according to my guess,since traffic peaks during office start and leaving hours,peak calls should be made around 9AM & 5PM.
+
+## Which part of the day receives maximum calls registered under TRAFFIC?
+
+```{r,fig.width=8.3}
+temp=cal %>% filter(type=="Traffic") %>% group_by(subtype,hour) %>% summarise(count=n()) %>% arrange(-count)
+ggplot(temp,aes(hour,count,fill=subtype))+geom_bar(stat="identity")+labs(x="Time in Hour",y="Count",fill="Traffic Type")+ggtitle("Traffic Call pattern through the day")+theme(legend.position="bottom",plot.title = element_text(color="red",size=15,face='bold',hjust=0.5))+scale_x_continuous(limits=c(0,23),breaks=seq(0,23,1))
+```
+
+As guessed,the traffic calls peak during evening hours starting from 3PM to 5PM.This graph also follows an normal distribution.
+
+# Fire Analysis
+
+```{r,fig.width=8,fig.height=8}
+temp=cal %>% filter(type=="Fire") %>% group_by(subtype) %>% summarise(count=n()) %>% arrange(-count)
+ggplot(temp,aes(subtype,count,fill=subtype))+geom_bar(stat="identity")+theme(axis.text.x = element_text(angle=90),plot.title = element_text(hjust=0.5,size=15,color="red",face="bold"),legend.position="None")+labs(x="Subtype",y="Count")+ggtitle("Fire calls made through 911")
+```
+
+Fire alarm dominates the calls made under Fire followed by vehicle accident.This category is represented in all the types.
+
+## Which part of the day receives maximum fire related calls?
+
+```{r,fig.width=15,fig.height=9}
+temp=cal %>% filter(type=="Fire") %>% group_by(subtype,hour) %>% summarise(count=n()) %>% arrange(-count)
+ggplot(temp,aes(hour,count,fill=subtype))+geom_bar(stat="identity")+labs(x="Time in Hour",y="Count",fill="Fire call Type")+ggtitle("Fire Call pattern through the day")+theme(legend.position="bottom",plot.title = element_text(color="red",size=15,face='bold',hjust=0.5))+scale_x_continuous(limits=c(0,23),breaks=seq(0,23,1))
+```
+
+Maximum fire related emergencies are reported in the evening hours between 5 to 6PM.
+
+#City Analysis
+
+##Which city requires more help?
+
+```{r,fig.width=13,fig.height=13}
+temp=cal %>% group_by(twp) %>% summarise(count=n()) %>% arrange(-count)
+ggplot(temp,aes(factor(twp,levels=twp),count,fill=twp))+geom_bar(stat="identity")+theme(legend.position="none",plot.title = element_text(color="red",size=15,face='bold',hjust=0.5),axis.text.x = element_text(angle=90,vjust=-0.4,hjust=0.5))+labs(x="City",y="Count",title="City registering most calls")
+```
+
+Lower Merion registers most calls.There are few unknown cities which has registered 74 calls.Let us see what type of calls are made in Lower Merion.As we have already seen,EMS calls might dominate here since irrespective of the time and day of the week,EMS related calls are made more.
+
+```{r}
+temp=cal %>% filter(twp=='LOWER MERION') %>% group_by(type) %>% summarise(count=n())
+ggplot(temp,aes(type,count,fill=type))+geom_bar(stat="identity")+labs(x="Type",y="Count",title="Type of calls made at LOWER MERION")+theme(legend.position="none",plot.title = element_text(color="red",size=15,face='bold',hjust=0.5),axis.text.x = element_text(angle=90,vjust=-0.4))
+```
+
+# Conclusion:
+
+ * This project explores the 911 calls delving indepth the type of calls made,time of calls,pattern in cities registering maximum number of calls.
+ * Category wise the type of calls was analysed bringing out important trends in the data.
